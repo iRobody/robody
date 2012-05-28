@@ -30,6 +30,7 @@ private:
     const char *serial;
 
     USB usb;
+
     bool connected;
     uint8_t in;
     uint8_t out;
@@ -64,7 +65,6 @@ public:
     int read(void *buff, int len, unsigned int nakLimit = USB_NAK_LIMIT);
     int write(void *buff, int len);
 
-	uint8_t revC;
 	void intHandler();
 };
 

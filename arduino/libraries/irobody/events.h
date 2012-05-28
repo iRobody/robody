@@ -1,11 +1,12 @@
 #ifndef _EVENTS_H
 #define _EVENTS_H
 
-#define MAX_PUB_SIG 100
+#include <qp/qp_port.h>
+
 //list all possible event signals
 typedef enum _Singal {
 	//
-	SIG_ROBUDDY_S = 0,
+	SIG_ROBUDDY_S = Q_USER_SIG,
 	SIG_ROBUDDY_C,
 	//
 	SIG_ROBODY_S,
@@ -14,7 +15,7 @@ typedef enum _Singal {
 	SIG_MOVE_S,
 	SIG_MOVE_C,
 	//
-	SIG_MAX
+	MAX_PUB_SIG
 } Singal;
 
 typedef enum _SigFunc {

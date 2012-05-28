@@ -84,7 +84,7 @@ bool AndroidAccessory::switchDevice(byte addr)
     int protocol = getProtocol(addr);
 
     if (protocol == 1) {
-        Serial.print("device supports protcol 1\n");
+        Serial.print("device supports protocol 1\n");
     } else {
         Serial.print("could not read device protocol version\n");
         return false;
@@ -104,7 +104,7 @@ bool AndroidAccessory::switchDevice(byte addr)
                 ACCESSORY_START, 0, 0, 0, 0, NULL);
 
     while (usb.getUsbTaskState() != USB_DETACHED_SUBSTATE_WAIT_FOR_DEVICE) {
-        //max.Task();
+        usb.IntHandler();
         usb.Task();
     }
 
@@ -227,7 +227,7 @@ bool AndroidAccessory::isConnected(void)
 {
     USB_DEVICE_DESCRIPTOR *devDesc = (USB_DEVICE_DESCRIPTOR *) descBuff;
     byte err;
-	/* only interupt handle, no need more 
+	/* only interrupt handle, no need more
     max.Task();	
     usb.Task();*/
 
@@ -244,11 +244,11 @@ bool AndroidAccessory::isConnected(void)
         }
 
         if (isAccessoryDevice(devDesc)) {
-            Serial.print("found android acessory device\n");
+            Serial.print("found accessory device\n");
 
             connected = configureAndroid();
         } else {
-            Serial.print("found possible device. swithcing to serial mode\n");
+            Serial.print("found possible device. switching to serial mode\n");
             switchDevice(1);
         }
     } else if (usb.getUsbTaskState() == USB_DETACHED_SUBSTATE_WAIT_FOR_DEVICE) {
@@ -274,23 +274,33 @@ int AndroidAccessory::write(void *buff, int len)
 void AndroidAccessory::intHandler() {
 	byte irq = usb.IntHandler();
 	usb.Task();
+
 	if( irq & bmCONDETIRQ) {
 		if(isConnected()) {
-		//device attached
-		static QEvent const attachE = { 0, SIG_ROBODY_C, 1, SFUNC_START, 0, 0 };
-		QF::publish( &attachE);
+			//device attached
+			static QEvent const attachE = { 0, SIG_ROBODY_C, 1, SFUNC_START, 0, 0 };
+			QF::publish( &attachE);
 		} else {
-		//device detached
-		static QEvent const detachE = { 0, SIG_ROBODY_C, 1, SFUNC_STOP, 0, 0 };
-		QF::publish( &detachE);
+			//device detached
+			static QEvent const detachE = { 0, SIG_ROBODY_C, 1, SFUNC_STOP, 0, 0 };
+			QF::publish( &detachE);
 		}
 		return;
 	}
+
+	if( !connected)
+		return;
+
 	if( irq & bmRCVDAVIRQ ) {
 		//read and publish event
+		Serial.println("data received");
 		QEvent* pEvent = Q_NEW(QEvent, 0);
 		while( pEvent 
-			&& usb.readFIFO( ACCESSORY_ENDPOINT, in, EVENT_SERDES_SIZE, (char*)pEvent) ) {
+			&& usb.readFIFO( ACCESSORY_ENDPOINT, in, EVENT_HEADER_SIZE, (char*)pEvent) ) {
+			/*irobody_TODO: is there on event transfer during mutiple packages
+			* if yes, we should wait for the remain data
+			*/
+			usb.readFIFO( ACCESSORY_ENDPOINT, in, pEvent->length, ((char*)pEvent)+EVENT_HEADER_SIZE);
 			pEvent->type &= ~EVENT_TYPE_RELAY; //clear relay flag
 			QF::publish( pEvent);
 			pEvent = Q_NEW(QEvent, 0);
@@ -298,7 +308,9 @@ void AndroidAccessory::intHandler() {
 		if( pEvent)
 			QF::gc(pEvent);
 	}
-	if( irq & bmHXFRDNIRQ )
+	if( irq & bmHXFRDNIRQ ){
 		//request event again
-		usb.reqNewIn(ACCESSORY_ENDPOINT);
+		Serial.println("no data, request again");
+		usb.reqNewIn(ACCESSORY_ENDPOINT, in);
+	}
 }

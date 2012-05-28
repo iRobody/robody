@@ -455,6 +455,7 @@ bool USB::readFIFO( byte addr, byte ep, uint8_t nbytes, char* data) {
 	return true;
 }
 
-void USB::reqNewIn(byte ep) {
+void USB::reqNewIn( byte addr, byte ep) {
+	regWr( rHCTL, devtable[ addr ].epinfo[ ep ].rcvToggle );
     regWr( rHXFR, ( tokIN|ep ));            //launch the transfer
 }

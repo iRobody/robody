@@ -155,7 +155,7 @@ class USB : public MAX3421E {
         void Task( void );
 		//support function to syn qp events
 		bool readFIFO( byte addr, byte ep, uint8_t nbytes, char* data);
-		void reqNewIn( byte ep);
+		void reqNewIn( byte addr, byte ep);
     private:
         void init();
 };

@@ -987,7 +987,8 @@ QEvent *QF::new_(uint16_t evtSize, QSignal sig) {
 
 	//iRobody: set type and len
 	e->type = EVENT_TYPE_RELAY; //relay and pub
-	e->length = EVENT_SERDES_SIZE-2;
+	e->func = 0;
+	e->length = 0;
 
     e->sig = sig;                                 // set signal for this event
     EVT_POOL_ID(e) = (uint8_t)(idx + 1);     // store the pool ID in the event
@@ -1750,6 +1751,7 @@ void QF::init(void) {
 QActive* QF::superActive = 0;
 void QF::init(QActive* superAO) {
 	superActive = superAO;
+	init();
 }
 
 //............................................................................

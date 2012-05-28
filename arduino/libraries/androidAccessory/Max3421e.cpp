@@ -199,7 +199,9 @@ boolean MAX3421E::reset()
     regWr( rUSBCTL, bmCHIPRES );                        //Chip reset. This stops the oscillator
     regWr( rUSBCTL, 0x00 );                             //Remove the reset
     while(!(regRd( rUSBIRQ ) & bmOSCOKIRQ )) {          //wait until the PLL is stable
-        tmp++;                                          //timeout after 256 attempts
+        tmp++;
+        delay(10);
+        //timeout after 256 attempts
         if( tmp == 0 ) {
             return( false );
         }
@@ -278,7 +280,7 @@ void MAX3421E::powerOn()
 
     /* configure host operation */
     regWr( rMODE, bmDPPULLDN|bmDMPULLDN|bmHOST|bmSEPIRQ );      // set pull-downs, Host, Separate GPIN IRQ on GPX
-    regWr( rHIEN, bmCONDETIE|bmFRAMEIE|bmHXFRDNIE|bmRCVDAVIE );                                             //connection detection
+    regWr( rHIEN, bmCONDETIE|bmFRAMEIE|bmHXFRDNIE);                                             //connection detection
     /* check if device is connected */
     regWr( rHCTL,bmSAMPLEBUS );                                             // sample USB bus
     while(!(regRd( rHCTL ) & bmSAMPLEBUS ));                                //wait for sample operation to finish
@@ -286,6 +288,7 @@ void MAX3421E::powerOn()
     regWr( rHIRQ, bmCONDETIRQ );                                            //clear connection detect interrupt                 
     regWr( rCPUCTL, 0x01 );                                                 //enable interrupt pin
 }
+
 /* MAX3421 state change task and interrupt handler */
 byte MAX3421E::Task( void )
 {
@@ -303,15 +306,16 @@ byte MAX3421E::Task( void )
     }
 //    usbSM();                                //USB state machine                            
     return( rcode );   
-}   
+}
+
 byte MAX3421E::IntHandler()
 {
  byte HIRQ;
  byte HIRQ_sendback = 0x00;
     HIRQ = regRd( rHIRQ );                  //determine interrupt source
-    //if( HIRQ & bmFRAMEIRQ ) {               //->1ms SOF interrupt handler
-    //    HIRQ_sendback |= bmFRAMEIRQ;
-    //}//end FRAMEIRQ handling
+    if( HIRQ & bmFRAMEIRQ ) {               //->1ms SOF interrupt handler
+        HIRQ_sendback |= bmFRAMEIRQ;
+    }//end FRAMEIRQ handling
     if( HIRQ & bmCONDETIRQ ) {
         busprobe();
         HIRQ_sendback |= bmCONDETIRQ;
@@ -322,15 +326,13 @@ byte MAX3421E::IntHandler()
 		if( rsl )
 			//error, clear receive flag
 			HIRQ&=(~bmRCVDAVIRQ);
-	}
-	//handler receive data
-	if( HIRQ & bmRCVDAVIRQ) {
-		HIRQ_sendback |= bmRCVDAVIRQ;
+		HIRQ_sendback |= bmHXFRDNIRQ;
 	}
     /* End HIRQ interrupts handling, clear serviced IRQs    */
     regWr( rHIRQ, HIRQ_sendback );
     return( HIRQ );
 }
+
 byte MAX3421E::GpxHandler()
 {
  byte GPINIRQ = regRd( rGPINIRQ );          //read GPIN IRQ register

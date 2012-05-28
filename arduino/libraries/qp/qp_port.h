@@ -192,12 +192,19 @@ namespace QP {
 /// The following example illustrates how to add an event parameter by
 /// inheriting from the QEvent class.
 /// \include qep_qevent.cpp
+#define EVENT_SERDES_SIZE 64
+#define EVENT_HEADER_SIZE 4
+#define EVENT_DATA_SIZE 60
+
+#define EVENT_TYPE_SUB 0x01
+#define EVENT_TYPE_RELAY 0x02
+
 struct QEvent {
 	uint8_t type;		///< pub or sub flag
-	uint8_t length;
     QSignal sig;                             ///< signal of the event instance
 	uint8_t func;
-	uint8_t data[60];
+	uint8_t length;
+	uint8_t data[EVENT_DATA_SIZE];
 	//64 byte above
     uint8_t poolId_;                         ///< pool ID (0 for static event)
     uint8_t refCtr_;                                    ///< reference counter
@@ -207,12 +214,6 @@ struct QEvent {
     virtual ~QEvent() {}                                 // virtual destructor
 #endif
 };
-
-#define EVENT_SERDES_SIZE 64
-
-#define EVENT_TYPE_SUB 0x01
-#define EVENT_TYPE_RELAY 0x02
-
 
 //////////////////////////////////////////////////////////////////////////////
 /// helper macro to calculate static dimension of a 1-dim array \a array_
@@ -332,7 +333,10 @@ protected:
 /// from QHsm.
 /// \include qep_qhsm.cpp
 class QHsm {
-protected:
+	/*irobody: add self pointer me to make other qp macro happy*/
+public:
+	QHsm* me;
+
     QStateHandler m_state;          ///< current active state (state-variable)
 
 public:
@@ -382,7 +386,7 @@ protected:
     /// \sa The ::QHsm example illustrates how to use the QHsm constructor
     /// in the constructor initializer list of the derived state machines.
     /// \sa QFsm::QFsm()
-    QHsm(QStateHandler initial) : m_state(initial) {}
+    QHsm(QStateHandler initial) : me(this),m_state(initial) {}
 
     /// \brief the top-state.
     ///
