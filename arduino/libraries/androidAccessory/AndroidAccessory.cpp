@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <irobody/events.h>
 #include <qp/qp_port.h>
 
 #include "AndroidAccessory.h"
@@ -54,7 +53,6 @@ AndroidAccessory::AndroidAccessory(const char *manufacturer,
 void AndroidAccessory::powerOn(void)
 {
     usb.powerOn();
-    delay(200);
 }
 
 int AndroidAccessory::getProtocol(byte addr)
@@ -102,12 +100,12 @@ bool AndroidAccessory::switchDevice(byte addr)
                 USB_SETUP_TYPE_VENDOR |
                 USB_SETUP_RECIPIENT_DEVICE,
                 ACCESSORY_START, 0, 0, 0, 0, NULL);
-
+/*irobody:
     while (usb.getUsbTaskState() != USB_DETACHED_SUBSTATE_WAIT_FOR_DEVICE) {
         usb.IntHandler();
         usb.Task();
     }
-
+*/
     return true;
 }
 
@@ -234,21 +232,21 @@ bool AndroidAccessory::isConnected(void)
     if (!connected &&
         usb.getUsbTaskState() >= USB_STATE_CONFIGURING &&
         usb.getUsbTaskState() != USB_STATE_RUNNING) {
-        Serial.print("\nDevice addressed... ");
-        Serial.print("Requesting device descriptor.\n");
+        Serial.println("\nDevice addressed... ");
+        Serial.println("Requesting device descriptor.\n");
 
         err = usb.getDevDescr(1, 0, 0x12, (char *) devDesc);
         if (err) {
-            Serial.print("\nDevice descriptor cannot be retrieved. Trying again\n");
+            Serial.println("\nDevice descriptor cannot be retrieved. Trying again\n");
             return false;
         }
 
         if (isAccessoryDevice(devDesc)) {
-            Serial.print("found accessory device\n");
+            Serial.println("found accessory device\n");
 
             connected = configureAndroid();
         } else {
-            Serial.print("found possible device. switching to serial mode\n");
+            Serial.println("found possible device. switching to serial mode\n");
             switchDevice(1);
         }
     } else if (usb.getUsbTaskState() == USB_DETACHED_SUBSTATE_WAIT_FOR_DEVICE) {
@@ -267,50 +265,31 @@ int AndroidAccessory::read(void *buff, int len, unsigned int nakLimit)
 
 int AndroidAccessory::write(void *buff, int len)
 {
+	usb.disInt();
     usb.outTransfer(ACCESSORY_ENDPOINT, out, len, (char *)buff);
+    usb.enInt();
     return len;
 }
 
-void AndroidAccessory::intHandler() {
-	byte irq = usb.IntHandler();
-	usb.Task();
+bool AndroidAccessory::readFIFO(void* buff, int len) {
+	return usb.readFIFO( ACCESSORY_ENDPOINT, in, len, (char*)buff);
+}
 
-	if( irq & bmCONDETIRQ) {
-		if(isConnected()) {
-			//device attached
-			static QEvent const attachE = { 0, SIG_ROBODY_C, 1, SFUNC_START, 0, 0 };
-			QF::publish( &attachE);
-		} else {
-			//device detached
-			static QEvent const detachE = { 0, SIG_ROBODY_C, 1, SFUNC_STOP, 0, 0 };
-			QF::publish( &detachE);
-		}
-		return;
-	}
+void AndroidAccessory::reqIn( ) {
+	usb.reqIn( ACCESSORY_ENDPOINT, in);
+}
 
-	if( !connected)
-		return;
+bool AndroidAccessory::connect() {
 
-	if( irq & bmRCVDAVIRQ ) {
-		//read and publish event
-		Serial.println("data received");
-		QEvent* pEvent = Q_NEW(QEvent, 0);
-		while( pEvent 
-			&& usb.readFIFO( ACCESSORY_ENDPOINT, in, EVENT_HEADER_SIZE, (char*)pEvent) ) {
-			/*irobody_TODO: is there on event transfer during mutiple packages
-			* if yes, we should wait for the remain data
-			*/
-			usb.readFIFO( ACCESSORY_ENDPOINT, in, pEvent->length, ((char*)pEvent)+EVENT_HEADER_SIZE);
-			pEvent->type &= ~EVENT_TYPE_RELAY; //clear relay flag
-			QF::publish( pEvent);
-			pEvent = Q_NEW(QEvent, 0);
-		}
-		if( pEvent)
-			QF::gc(pEvent);
-	}
-	if( irq & bmHXFRDNIRQ ){
-		//request event again
-		Serial.println("no data, request again");
-		usb.reqNewIn(ACCESSORY_ENDPOINT, in);
-	}
+	USB_DEVICE_DESCRIPTOR *devDesc = (USB_DEVICE_DESCRIPTOR *) descBuff;
+    byte err = usb.getDevDescr(1, 0, 0x12, (char *) devDesc);
+    if (err) {
+    	return false;
+    }
+    if (isAccessoryDevice(devDesc)) {
+    	return configureAndroid();
+    } else {
+    	switchDevice(1);
+    }
+    return false;
 }

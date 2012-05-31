@@ -26,7 +26,7 @@
 // e-mail:                  info@quantum-leaps.com
 //////////////////////////////////////////////////////////////////////////////
 #include "qp_port.h"                                                // QP port
-
+#include <arduino.h>
 #ifdef Q_USE_NAMESPACE
 namespace QP {
 #endif
@@ -44,7 +44,7 @@ enum QEPConst {
 
 /// helper macro to trigger internal event in an HSM
 #define QEP_TRIG_(state_, sig_) \
-    ((*(state_))(this, &QEP_reservedEvt_[sig_]))
+    ((this->*state_)(&QEP_reservedEvt_[sig_]))
 
 /// helper macro to trigger exit action in an HSM
 #define QEP_EXIT_(state_) \
@@ -73,10 +73,10 @@ QEvent const QEP_reservedEvt_[] = {
     (QSignal)Q_EXIT_SIG,
     (QSignal)Q_INIT_SIG
 #else
-    {(QSignal)QEP_EMPTY_SIG_, (uint8_t)0, (uint8_t)0},
-    {(QSignal)Q_ENTRY_SIG,    (uint8_t)0, (uint8_t)0},
-    {(QSignal)Q_EXIT_SIG,     (uint8_t)0, (uint8_t)0},
-    {(QSignal)Q_INIT_SIG,     (uint8_t)0, (uint8_t)0}
+    QEVENT(QEP_EMPTY_SIG_),
+    QEVENT(Q_ENTRY_SIG),
+    QEVENT(Q_EXIT_SIG),
+    QEVENT(Q_INIT_SIG)
 #endif
 };
 //............................................................................
@@ -95,8 +95,12 @@ char const Q_ROM * Q_ROM_VAR QEP::getVersion(void) {
 }
 
 // "qhsm_top.cpp" ============================================================
-QState QHsm::top(QHsm *, QEvent const *) {
+/*QState QHsm::top(QHsm *, QEvent const *) {
     return Q_IGNORED();                    // the top state ignores all events
+}*/
+
+QState QHsm::top( QEvent const*) {
+	return Q_IGNORED();
 }
 
 // "qhsm_ini.cpp" ============================================================
@@ -108,7 +112,7 @@ void QHsm::init(QEvent const *e) {
     QS_CRIT_STAT_
 
                               // the top-most initial transition must be taken
-    Q_ALLEGE((*m_state)(this, e) == Q_RET_TRAN);
+    Q_ALLEGE((this->*m_state)(e) == Q_RET_TRAN);
 
     t = (QStateHandler)&QHsm::top;              // HSM starts in the top state
     do {                                           // drill into the target...
@@ -139,6 +143,7 @@ void QHsm::init(QEvent const *e) {
         } while (ip >= (int8_t)0);
 
         t = path[0];                   // current state becomes the new source
+    //irobody_FIXME: if it is Q_TRAN, should exit previous state
     } while (QEP_TRIG_(t, Q_INIT_SIG) == Q_RET_TRAN);
     m_state = t;
 
@@ -168,7 +173,7 @@ void QHsm::dispatch(QEvent const *e) {
 
     do {                                // process the event hierarchically...
         s = m_state;
-        r = (*s)(this, e);                           // invoke state handler s
+        r = (this->*s)(e);                           // invoke state handler s
     } while (r == Q_RET_SUPER);
 
     if (r == Q_RET_TRAN) {                                // transition taken?
@@ -419,7 +424,7 @@ extern QTimeEvt *QF_timeEvtListHead_;  ///< head of linked list of time events
 extern QF_EPOOL_TYPE_ QF_pool_[QF_MAX_EPOOL];        ///< allocate event pools
 extern uint8_t QF_maxPool_;                  ///< # of initialized event pools
 extern QSubscrList *QF_subscrList_;             ///< the subscriber list array
-extern QSignal QF_maxSignal_;                ///< the maximum published signal
+extern QChannel QF_maxChannel_;                ///< the maximum published signal
 
 //............................................................................
 /// \brief Structure representing a free block in the Native QF Memory Pool
@@ -623,10 +628,10 @@ void QActive::postLIFO(QEvent const *e) {
 }
 
 // "qa_sub.cpp" ==============================================================
-void QActive::subscribe(QSignal sig) const {
+void QActive::subscribe(QChannel ch) const {
     uint8_t p = m_prio;
-    Q_REQUIRE(((QSignal)Q_USER_SIG <= sig)
-              && (sig < QF_maxSignal_)
+    Q_REQUIRE(/*((QSig)Q_USER_SIG <= sig)
+              && */(ch < QF_maxChannel_)
               && ((uint8_t)0 < p) && (p <= (uint8_t)QF_MAX_ACTIVE)
               && (QF::active_[p] == this));
 
@@ -641,15 +646,22 @@ void QActive::subscribe(QSignal sig) const {
         QS_OBJ_(this);                                   // this active object
     QS_END_NOCRIT_()
                                                        // set the priority bit
-    QF_subscrList_[sig].m_bits[i] |= Q_ROM_BYTE(QF_pwr2Lkup[p]);
+    QF_subscrList_[ch].m_bits[i] |= Q_ROM_BYTE(QF_pwr2Lkup[p]);
     QF_CRIT_EXIT_();
+    //irobody: relay sub event
+    if( QF::observerActive) {
+    	QEvent* pSubEvent = Q_NEW(QEvent, Q_OOB_SIG);
+    	pSubEvent->type |= EVENT_TYPE_SUB;
+    	pSubEvent->channel = ch;
+    	QF::observerActive->postFIFO(pSubEvent);
+    }
 }
 
 // "qa_usub.cpp" =============================================================
-void QActive::unsubscribe(QSignal sig) const {
+void QActive::unsubscribe(QChannel ch) const {
     uint8_t p = m_prio;
-    Q_REQUIRE(((QSignal)Q_USER_SIG <= sig)
-              && (sig < QF_maxSignal_)
+    Q_REQUIRE(/*((QSignal)Q_USER_SIG <= sig)
+              &&*/ (ch < QF_maxChannel_)
               && ((uint8_t)0 < p) && (p <= (uint8_t)QF_MAX_ACTIVE)
               && (QF::active_[p] == this));
 
@@ -664,8 +676,15 @@ void QActive::unsubscribe(QSignal sig) const {
         QS_OBJ_(this);                                   // this active object
     QS_END_NOCRIT_()
                                                      // clear the priority bit
-    QF_subscrList_[sig].m_bits[i] &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);
+    QF_subscrList_[ch].m_bits[i] &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);
     QF_CRIT_EXIT_();
+    //irobody: relay unsub event
+    if( QF::observerActive) {
+    	QEvent* pSubEvent = Q_NEW(QEvent, Q_OOB_SIG);
+    	pSubEvent->type |= EVENT_TYPE_UNSUB;
+    	pSubEvent->channel = ch;
+    	QF::observerActive->postFIFO(pSubEvent);
+    }
 }
 
 // "qa_usuba.cpp" ============================================================
@@ -676,11 +695,11 @@ void QActive::unsubscribeAll(void) const {
 
     uint8_t i = Q_ROM_BYTE(QF_div8Lkup[p]);
 
-    QSignal sig;
-    for (sig = (QSignal)Q_USER_SIG; sig < QF_maxSignal_; ++sig) {
+    QChannel ch;
+    for (ch = (QChannel)0; ch < QF_maxChannel_; ++ch) {
         QF_CRIT_STAT_
         QF_CRIT_ENTRY_();
-        if ((QF_subscrList_[sig].m_bits[i] & Q_ROM_BYTE(QF_pwr2Lkup[p]))
+        if ((QF_subscrList_[ch].m_bits[i] & Q_ROM_BYTE(QF_pwr2Lkup[p]))
              != 0)
         {
 
@@ -690,9 +709,15 @@ void QActive::unsubscribeAll(void) const {
                 QS_OBJ_(this);                           // this active object
             QS_END_NOCRIT_()
                                                      // clear the priority bit
-            QF_subscrList_[sig].m_bits[i] &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);
+            QF_subscrList_[ch].m_bits[i] &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);
         }
         QF_CRIT_EXIT_();
+    }
+    //irobody: relay unsub all event
+    if( QF::observerActive) {
+    	QEvent* pSubEvent = Q_NEW(QEvent, Q_OOB_SIG);
+    	pSubEvent->type |= EVENT_TYPE_UNSUB;
+    	QF::observerActive->postFIFO(pSubEvent);
     }
 }
 
@@ -987,7 +1012,7 @@ QEvent *QF::new_(uint16_t evtSize, QSignal sig) {
 
 	//iRobody: set type and len
 	e->type = EVENT_TYPE_RELAY; //relay and pub
-	e->func = 0;
+	e->channel = 0;
 	e->length = 0;
 
     e->sig = sig;                                 // set signal for this event
@@ -1016,12 +1041,12 @@ void QF::poolInit(void *poolSto, uint32_t poolSize, QEventSize evtSize) {
 // "qf_psini.cpp" ============================================================
 // Package-scope objects -----------------------------------------------------
 QSubscrList *QF_subscrList_;
-QSignal QF_maxSignal_;
+QChannel QF_maxChannel_;
 
 //............................................................................
-void QF::psInit(QSubscrList *subscrSto, QSignal maxSignal) {
+void QF::psInit(QSubscrList *subscrSto, QChannel maxCh) {
     QF_subscrList_ = subscrSto;
-    QF_maxSignal_ = maxSignal;
+    QF_maxChannel_ = maxCh;
 }
 
 // "qf_pspub.cpp" ============================================================
@@ -1031,11 +1056,11 @@ void QF::publish(QEvent const *e) {
 void QF::publish(QEvent const *e, void const *sender) {
 #endif
 	//iRobody: super active is for relay event, must not null;
-	if( (e->type & EVENT_TYPE_RELAY) && superActive) {
-		superActive->postFIFO( e);
+	if( (e->type & EVENT_TYPE_RELAY) && observerActive) {
+		observerActive->postFIFO( e);
 	}
          // make sure that the published signal is within the configured range
-    Q_REQUIRE(e->sig < QF_maxSignal_);
+    Q_REQUIRE(e->channel < QF_maxChannel_);
 
     QF_CRIT_STAT_
     QF_CRIT_ENTRY_();
@@ -1054,7 +1079,7 @@ void QF::publish(QEvent const *e, void const *sender) {
     QF_CRIT_EXIT_();
 
 #if (QF_MAX_ACTIVE <= 8)
-    uint8_t tmp = QF_subscrList_[e->sig].m_bits[0];
+    uint8_t tmp = QF_subscrList_[e->channel].m_bits[0];
     while (tmp != (uint8_t)0) {
         uint8_t p = Q_ROM_BYTE(QF_log2Lkup[tmp]);
         tmp &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);      // clear the subscriber bit
@@ -1337,6 +1362,10 @@ QTimeEvt::QTimeEvt(QSignal s)
     Q_REQUIRE(s >= (QSignal)Q_USER_SIG);                       // valid signal
     sig = s;
     EVT_POOL_ID(this) = (uint8_t)0;   // time event must be static, see NOTE01
+    //irobody: default type is 0, len is 0
+    type = 0;
+    channel = 0;
+    length = 0;
 }
 
 // "qte_ctr.cpp" =============================================================
@@ -1748,12 +1777,19 @@ void QF::init(void) {
     // nothing to do for the "vanilla" kernel
 }
 //iRobody: must define a superActive in application
-QActive* QF::superActive = 0;
-void QF::init(QActive* superAO) {
-	superActive = superAO;
+QActive* QF::observerActive = 0;
+void QF::init(QActive* observer) {
+	observerActive = observer;
 	init();
 }
-
+void QF::setObserver(QActive* observer) {
+	observerActive = observer;
+}
+void QF::removeObserver(QActive* observer) {
+	if( observerActive != observer)
+		return;
+	observerActive = 0;
+}
 //............................................................................
 void QF::stop(void) {
     QF::onCleanup();                                       // cleanup callback

@@ -21,6 +21,9 @@
 #include "usb.h"
 
 class AndroidAccessory {
+public:
+	USB usb;
+
 private:
     const char *manufacturer;
     const char *model;
@@ -28,8 +31,6 @@ private:
     const char *version;
     const char *uri;
     const char *serial;
-
-    USB usb;
 
     bool connected;
     uint8_t in;
@@ -65,7 +66,10 @@ public:
     int read(void *buff, int len, unsigned int nakLimit = USB_NAK_LIMIT);
     int write(void *buff, int len);
 
-	void intHandler();
+    bool readFIFO(void* buff, int len);
+    void reqIn();
+
+	bool connect();
 };
 
 #endif /* __AndroidAccessory_h__ */

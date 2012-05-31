@@ -53,6 +53,8 @@ class MAX3421E /* : public SPI */ {
         boolean vbusPwr ( boolean );
         void busprobe( void );
         void powerOn();
+        void enInt(byte mask = 0);
+        void disInt(byte mask = 0);
         byte IntHandler();
         byte GpxHandler();
         byte Task();

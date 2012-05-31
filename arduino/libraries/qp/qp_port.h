@@ -197,14 +197,16 @@ namespace QP {
 #define EVENT_DATA_SIZE 60
 
 #define EVENT_TYPE_SUB 0x01
-#define EVENT_TYPE_RELAY 0x02
+#define EVENT_TYPE_UNSUB 0x02
+
+#define EVENT_TYPE_RELAY 0x80
+
+#define QEVENT(sig) {0,0,0,0,sig,0,0}
+#define QEVENT_CH(ch,sig) {0,0,ch,sig,0,0}
+
+typedef uint8_t QChannel;
 
 struct QEvent {
-	uint8_t type;		///< pub or sub flag
-    QSignal sig;                             ///< signal of the event instance
-	uint8_t func;
-	uint8_t length;
-	uint8_t data[EVENT_DATA_SIZE];
 	//64 byte above
     uint8_t poolId_;                         ///< pool ID (0 for static event)
     uint8_t refCtr_;                                    ///< reference counter
@@ -213,6 +215,18 @@ struct QEvent {
     QEvent(QSignal s) : sig(s) {}
     virtual ~QEvent() {}                                 // virtual destructor
 #endif
+    //raw event--------------------------------
+    //header
+	uint8_t type;		///< pub or sub flag
+	QChannel channel;
+    QSignal sig;                             ///< signal of the event instance
+	uint8_t length;
+	//data
+	uint8_t data;
+};
+
+struct QEventMax: QEvent {
+	uint8_t exData[EVENT_DATA_SIZE-1];
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -242,18 +256,15 @@ public:
                        /// \brief Type returned from  a state-handler function
 typedef uint8_t QState;
 
-                                  /// \brief pointer to state-handler function
-typedef QState (*QStateHandler)(void *me, QEvent const *e);
+//irobody: use member function pointer as handler
+                      /// \brief pointer to state-handler function
+
 
 	/// \brief Macro to help declare/define state handler in class as member-function
 #define QSTATE_HANDLER(f) \
-	static QState (__CLASS__::*f)( const QEvent*);\
-	QState _s_##f( const QEvent*);
+	QState f( const QEvent*);
 #define QSTATE_HANDLER_DEF(_class, f, event) \
-	QState (_class::*_class::f)( const QEvent*) = &_class::_s_##f;\
-	QState _class::_s_##f( const QEvent* event)
-#define QSTATEHANDLER(f) \
-	(QStateHandler)(*(int*)&f)
+	QState _class::f( const QEvent* event)
 	
 //////////////////////////////////////////////////////////////////////////////
 /// \brief Finite State Machine base class
@@ -270,6 +281,7 @@ typedef QState (*QStateHandler)(void *me, QEvent const *e);
 /// The following example illustrates how to derive a state machine class
 /// from QFsm.
 /// \include qep_qfsm.cpp
+#if 0
 class QFsm {
 protected:
     QStateHandler m_state;          ///< current active state (state-variable)
@@ -317,7 +329,7 @@ protected:
     /// in the constructor initializer list of the derived state machines.
     QFsm(QStateHandler initial) : m_state(initial) {}
 };
-
+#endif
 //////////////////////////////////////////////////////////////////////////////
 /// \brief Hierarchical State Machine base class
 ///
@@ -333,10 +345,9 @@ protected:
 /// from QHsm.
 /// \include qep_qhsm.cpp
 class QHsm {
-	/*irobody: add self pointer me to make other qp macro happy*/
 public:
-	QHsm* me;
-
+typedef QState (QHsm::*QStateHandler)(QEvent const *e);
+protected:
     QStateHandler m_state;          ///< current active state (state-variable)
 
 public:
@@ -386,7 +397,7 @@ protected:
     /// \sa The ::QHsm example illustrates how to use the QHsm constructor
     /// in the constructor initializer list of the derived state machines.
     /// \sa QFsm::QFsm()
-    QHsm(QStateHandler initial) : me(this),m_state(initial) {}
+    QHsm(QStateHandler initial) : m_state(initial) {}
 
     /// \brief the top-state.
     ///
@@ -395,7 +406,9 @@ protected:
     /// which means that it "handles" all events.
     ///
     /// \sa Example of the QCalc::on() state handler.
-    static QState top(QHsm *me, QEvent const *e);
+    //static QState top(QHsm *me, QEvent const *e);
+public:
+    QState top( QEvent const *e);
 };
 
 /// \brief Value returned by a non-hierarchical state-handler function when
@@ -433,7 +446,7 @@ protected:
 /// \include qepn_qtran.cpp
 //lint -e960 -e1924 ignore MISRA Rule 42 (comma operator) and C-style cast
 #define Q_TRAN(target_)  \
-    (me->m_state = (QStateHandler)(target_), Q_RET_TRAN)
+    (m_state = (QStateHandler)(target_), Q_RET_TRAN)
 
 /// \brief Value returned by a state-handler function when it cannot
 /// handle the event.
@@ -444,14 +457,16 @@ protected:
 /// \include qep_qhsm.cpp
 //lint -e960 -e1924 ignore MISRA Rule 42 (comma operator) and C-style cast
 #define Q_SUPER(super_)  \
-    (me->m_state = (QStateHandler)(super_),  Q_RET_SUPER)
+    (m_state = (QStateHandler)(super_),  Q_RET_SUPER)
 
 //////////////////////////////////////////////////////////////////////////////
 /// \brief QEP reserved signals.
 enum QReservedSignals {
-    Q_ENTRY_SIG = 1,                             ///< signal for entry actions
-    Q_EXIT_SIG,                                   ///< signal for exit actions
-    Q_INIT_SIG,                     ///< signal for nested initial transitions
+    Q_ENTRY_SIG = 1,                             ///< signal for entry actions; fire once, no need break
+    Q_EXIT_SIG,                                   ///< signal for exit actions; always trace back to parent, so if nothing, should super
+    Q_INIT_SIG,                     ///< signal for nested initial transitions; != QTRAN, to break;
+    //irobody: user for observer
+    Q_OOB_SIG,
     Q_USER_SIG                              ///< signal to offset user signals
 };
 
@@ -1489,7 +1504,7 @@ protected:
     ///
     /// \sa QF::publish(), QActive::unsubscribe(), and
     /// QActive::unsubscribeAll()
-    void subscribe(QSignal sig) const;
+    void subscribe(QChannel ch) const;
 
     /// \brief Un-subscribes from the delivery of signal \a sig to the
     /// active object.
@@ -1509,7 +1524,7 @@ protected:
     /// the first place is considered an error and QF will rise an assertion.
     ///
     /// \sa QF::publish(), QActive::subscribe(), and QActive::unsubscribeAll()
-    void unsubscribe(QSignal sig) const;
+    void unsubscribe(QChannel ch) const;
 
     /// \brief Defer an event to a given separate event queue.
     ///
@@ -1813,8 +1828,10 @@ public:
     /// any other QF function.
     static void init(void);
     //iRobody: set a superActive to monitor all event
-    static QActive* superActive;
+    static QActive* observerActive;
     static void init(QActive*);
+    static void setObserver(QActive*);
+    static void removeObserver(QActive*);
 
     /// \brief Publish-subscribe initialization.
     ///
@@ -1841,7 +1858,7 @@ public:
     ///
     /// The following example shows the typical initialization sequence of
     /// QF: \include qf_main.cpp
-    static void psInit(QSubscrList *subscrSto, QSignal maxSignal);
+    static void psInit(QSubscrList *subscrSto, QChannel maxCh);
 
     /// \brief Event pool initialization for dynamic allocation of events.
     ///

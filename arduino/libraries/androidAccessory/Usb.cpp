@@ -455,7 +455,72 @@ bool USB::readFIFO( byte addr, byte ep, uint8_t nbytes, char* data) {
 	return true;
 }
 
-void USB::reqNewIn( byte addr, byte ep) {
+void USB::reqIn( byte addr, byte ep) {
 	regWr( rHCTL, devtable[ addr ].epinfo[ ep ].rcvToggle );
     regWr( rHXFR, ( tokIN|ep ));            //launch the transfer
+}
+
+bool USB::devAttached() {
+    switch( getVbusState() ) {
+        case FSHOST:    //attached
+        case LSHOST:
+            return true;
+        }
+    return false;
+}
+
+void USB::busReset() {
+	regWr( rHCTL, bmBUSRST );
+}
+
+void USB::enSOF( ) {
+	disInt();
+	byte tmpdata = regRd( rMODE ) | bmSOFKAENAB;                 //start SOF generation
+	regWr( rHIRQ, bmFRAMEIRQ);
+	regWr( rMODE, tmpdata );
+
+	byte hie = regRd( rHIEN);
+	regWr( rHIEN, hie|bmFRAMEIE);
+	enInt();
+}
+
+void USB::disSOF() {
+	disInt();
+	byte tmpdata = regRd( rMODE ) & (~bmSOFKAENAB);                 //start SOF generation
+	regWr( rMODE, tmpdata );
+
+	byte hie = regRd( rHIEN);
+	regWr( rHIEN, hie& (~bmFRAMEIE));
+	enInt();
+}
+
+bool USB::getDescSize() {
+	USB_DEVICE_DESCRIPTOR buf;
+    devtable[ 0 ].epinfo->MaxPktSize = 8;   //set max.packet size to min.allowed
+    byte rcode = getDevDescr( 0, 0, 8, ( char* )&buf );
+    if( rcode == 0 ) {
+        devtable[ 0 ].epinfo->MaxPktSize = buf.bMaxPacketSize0;
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+bool USB::setAddress() {
+    for( int i = 1; i < USB_NUMDEVICES; i++ ) {
+        if( devtable[ i ].epinfo == NULL ) {
+            devtable[ i ].epinfo = devtable[ 0 ].epinfo;        //set correct MaxPktSize
+                                                                //temporary record
+                                                                //until plugged with real device endpoint structure
+            byte rcode = setAddr( 0, 0, i );
+            if( rcode == 0 ) {
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
+    }
+    return false;
 }

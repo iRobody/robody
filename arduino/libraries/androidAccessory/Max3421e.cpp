@@ -280,13 +280,32 @@ void MAX3421E::powerOn()
 
     /* configure host operation */
     regWr( rMODE, bmDPPULLDN|bmDMPULLDN|bmHOST|bmSEPIRQ );      // set pull-downs, Host, Separate GPIN IRQ on GPX
-    regWr( rHIEN, bmCONDETIE|bmFRAMEIE|bmHXFRDNIE);                                             //connection detection
+    regWr( rHIEN, bmCONDETIE/*|bmFRAMEIE|bmHXFRDNIE|bmBUSEVENTIE*/);                                             //connection detection
     /* check if device is connected */
     regWr( rHCTL,bmSAMPLEBUS );                                             // sample USB bus
     while(!(regRd( rHCTL ) & bmSAMPLEBUS ));                                //wait for sample operation to finish
     busprobe();                                                             //check if anything is connected
     regWr( rHIRQ, bmCONDETIRQ );                                            //clear connection detect interrupt                 
     regWr( rCPUCTL, 0x01 );                                                 //enable interrupt pin
+}
+
+void MAX3421E::enInt(byte mask) {
+	if( mask == 0)
+		regWr( rCPUCTL, 0x01 );                                                 //enable interrupt pin
+	else {
+		byte hie = regRd( rHIEN);
+		regWr( rHIEN, hie|mask);
+	}
+
+}
+
+void MAX3421E::disInt(byte mask) {
+	if( mask == 0)
+		regWr( rCPUCTL, 0x00 );
+	else {
+		byte hie = regRd( rHIEN);
+		regWr( rHIEN, hie& (~mask));
+	}
 }
 
 /* MAX3421 state change task and interrupt handler */
@@ -310,23 +329,28 @@ byte MAX3421E::Task( void )
 
 byte MAX3421E::IntHandler()
 {
- byte HIRQ;
- byte HIRQ_sendback = 0x00;
+	byte HIRQ,HIEN;
+	byte HIRQ_sendback = 0x00;
     HIRQ = regRd( rHIRQ );                  //determine interrupt source
-    if( HIRQ & bmFRAMEIRQ ) {               //->1ms SOF interrupt handler
-        HIRQ_sendback |= bmFRAMEIRQ;
+    HIEN = regRd( rHIEN);
+    if( HIRQ & HIEN & bmFRAMEIRQ ) {               //->1ms SOF interrupt handler
+       HIRQ_sendback |= bmFRAMEIRQ;
     }//end FRAMEIRQ handling
     if( HIRQ & bmCONDETIRQ ) {
         busprobe();
         HIRQ_sendback |= bmCONDETIRQ;
     }
 	//handler HOST transfer
-	if( HIRQ & bmHXFRDNIRQ) {
+	if( HIRQ & HIEN & bmHXFRDNIRQ) {
 		byte rsl = regRd( rHRSL) & 0x0f;
 		if( rsl )
 			//error, clear receive flag
 			HIRQ&=(~bmRCVDAVIRQ);
 		HIRQ_sendback |= bmHXFRDNIRQ;
+	}
+
+	if( HIRQ & HIEN & bmBUSEVENTIRQ) {
+		HIRQ_sendback |= bmBUSEVENTIRQ;
 	}
     /* End HIRQ interrupts handling, clear serviced IRQs    */
     regWr( rHIRQ, HIRQ_sendback );
