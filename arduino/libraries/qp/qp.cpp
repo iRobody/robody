@@ -648,13 +648,7 @@ void QActive::subscribe(QChannel ch) const {
                                                        // set the priority bit
     QF_subscrList_[ch].m_bits[i] |= Q_ROM_BYTE(QF_pwr2Lkup[p]);
     QF_CRIT_EXIT_();
-    //irobody: relay sub event
-    if( QF::observerActive) {
-    	QEvent* pSubEvent = Q_NEW(QEvent, Q_OOB_SIG);
-    	pSubEvent->type |= EVENT_TYPE_SUB;
-    	pSubEvent->channel = ch;
-    	QF::observerActive->postFIFO(pSubEvent);
-    }
+
 }
 
 // "qa_usub.cpp" =============================================================
@@ -678,13 +672,6 @@ void QActive::unsubscribe(QChannel ch) const {
                                                      // clear the priority bit
     QF_subscrList_[ch].m_bits[i] &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);
     QF_CRIT_EXIT_();
-    //irobody: relay unsub event
-    if( QF::observerActive) {
-    	QEvent* pSubEvent = Q_NEW(QEvent, Q_OOB_SIG);
-    	pSubEvent->type |= EVENT_TYPE_UNSUB;
-    	pSubEvent->channel = ch;
-    	QF::observerActive->postFIFO(pSubEvent);
-    }
 }
 
 // "qa_usuba.cpp" ============================================================
@@ -712,12 +699,6 @@ void QActive::unsubscribeAll(void) const {
             QF_subscrList_[ch].m_bits[i] &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);
         }
         QF_CRIT_EXIT_();
-    }
-    //irobody: relay unsub all event
-    if( QF::observerActive) {
-    	QEvent* pSubEvent = Q_NEW(QEvent, Q_OOB_SIG);
-    	pSubEvent->type |= EVENT_TYPE_UNSUB;
-    	QF::observerActive->postFIFO(pSubEvent);
     }
 }
 
@@ -1083,7 +1064,10 @@ void QF::publish(QEvent const *e, void const *sender) {
     while (tmp != (uint8_t)0) {
         uint8_t p = Q_ROM_BYTE(QF_log2Lkup[tmp]);
         tmp &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);      // clear the subscriber bit
-        Q_ASSERT(active_[p] != (QActive *)0);            // must be registered
+        //irobody: event no active subscribe this before, ignore it just
+        if( active_[p] == (QActive *)0)
+        	break;
+        //Q_ASSERT(active_[p] != (QActive *)0);            // must be registered
 
                            // POST() asserts internally if the queue overflows
         active_[p]->POST(e, sender);
@@ -1097,7 +1081,10 @@ void QF::publish(QEvent const *e, void const *sender) {
             uint8_t p = Q_ROM_BYTE(QF_log2Lkup[tmp]);
             tmp &= Q_ROM_BYTE(QF_invPwr2Lkup[p]);  // clear the subscriber bit
             p = (uint8_t)(p + (i << 3));                // adjust the priority
-            Q_ASSERT(active_[p] != (QActive *)0);        // must be registered
+            //irobody: event no active subscribe this before, ignore it just
+                    if( active_[p] == (QActive *)0)
+                    	break;
+            //Q_ASSERT(active_[p] != (QActive *)0);        // must be registered
 
                            // POST() asserts internally if the queue overflows
             active_[p]->POST(e, sender);
@@ -1782,14 +1769,48 @@ void QF::init(QActive* observer) {
 	observerActive = observer;
 	init();
 }
+
 void QF::setObserver(QActive* observer) {
 	observerActive = observer;
 }
+
 void QF::removeObserver(QActive* observer) {
 	if( observerActive != observer)
 		return;
 	observerActive = 0;
 }
+
+static struct QSubClaimEvent{
+	struct QEvent e;
+	uint8_t channels[QF_MAX_ACTIVE];
+} subClaimEvent = {QEVENT_PUB(0,Q_INFO_SIG),{0}};
+
+void QF::reclaimSubs() {
+	if( !observerActive)
+		return;
+	int l = 0;
+	for( uint8_t c= 0; c < QF_maxChannel_ ; c++) {
+#if (QF_MAX_ACTIVE <= 8)
+		if( QF_subscrList_[c].m_bits[0] != 0) {
+			subClaimEvent.channels[l] = c;
+			l++;
+		}
+#else
+	    uint8_t i = Q_DIM(QF_subscrList_[0].m_bits);// number of bytes in the list
+	    do {                       // go through all bytes in the subsciption list
+	        --i;
+	        if( QF_subscrList_[c].m_bits[0] != 0) {
+	        	subClaimEvent.channels[l] = c;
+	        	l++;
+	        	continue;
+	        }
+	    } while (i != (uint8_t)0);
+#endif
+	}
+	subClaimEvent.e.length = l;
+	observerActive->postFIFO( (QEvent*)&subClaimEvent);
+}
+
 //............................................................................
 void QF::stop(void) {
     QF::onCleanup();                                       // cleanup callback

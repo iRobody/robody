@@ -201,8 +201,8 @@ namespace QP {
 
 #define EVENT_TYPE_RELAY 0x80
 
-#define QEVENT(sig) {0,0,0,0,sig,0,0}
-#define QEVENT_CH(ch,sig) {0,0,ch,sig,0,0}
+#define QEVENT(sig) {0,0,0,0,sig,0}
+#define QEVENT_PUB(ch,sig) {0,0,EVENT_TYPE_RELAY,ch,sig,0}
 
 typedef uint8_t QChannel;
 
@@ -222,7 +222,6 @@ struct QEvent {
     QSignal sig;                             ///< signal of the event instance
 	uint8_t length;
 	//data
-	uint8_t data;
 };
 
 struct QEventMax: QEvent {
@@ -466,6 +465,7 @@ enum QReservedSignals {
     Q_EXIT_SIG,                                   ///< signal for exit actions; always trace back to parent, so if nothing, should super
     Q_INIT_SIG,                     ///< signal for nested initial transitions; != QTRAN, to break;
     //irobody: user for observer
+    Q_INFO_SIG,
     Q_OOB_SIG,
     Q_USER_SIG                              ///< signal to offset user signals
 };
@@ -1832,6 +1832,7 @@ public:
     static void init(QActive*);
     static void setObserver(QActive*);
     static void removeObserver(QActive*);
+    static void reclaimSubs();
 
     /// \brief Publish-subscribe initialization.
     ///

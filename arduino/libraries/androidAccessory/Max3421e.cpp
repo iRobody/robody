@@ -333,28 +333,23 @@ byte MAX3421E::IntHandler()
 	byte HIRQ_sendback = 0x00;
     HIRQ = regRd( rHIRQ );                  //determine interrupt source
     HIEN = regRd( rHIEN);
-    if( HIRQ & HIEN & bmFRAMEIRQ ) {               //->1ms SOF interrupt handler
-       HIRQ_sendback |= bmFRAMEIRQ;
-    }//end FRAMEIRQ handling
-    if( HIRQ & bmCONDETIRQ ) {
+    HIRQ_sendback = HIRQ&HIEN;
+    if( HIRQ_sendback & bmCONDETIRQ ) {
         busprobe();
         HIRQ_sendback |= bmCONDETIRQ;
     }
 	//handler HOST transfer
-	if( HIRQ & HIEN & bmHXFRDNIRQ) {
+	if( (HIRQ_sendback & bmHXFRDNIRQ)
+			&& (HIRQ & bmRCVDAVIRQ)) {
 		byte rsl = regRd( rHRSL) & 0x0f;
-		if( rsl )
-			//error, clear receive flag
-			HIRQ&=(~bmRCVDAVIRQ);
-		HIRQ_sendback |= bmHXFRDNIRQ;
+		if( !rsl )
+			//ok, add receive flag
+		HIRQ_sendback |= bmRCVDAVIRQ;
 	}
 
-	if( HIRQ & HIEN & bmBUSEVENTIRQ) {
-		HIRQ_sendback |= bmBUSEVENTIRQ;
-	}
     /* End HIRQ interrupts handling, clear serviced IRQs    */
     regWr( rHIRQ, HIRQ_sendback );
-    return( HIRQ );
+    return( HIRQ_sendback );
 }
 
 byte MAX3421E::GpxHandler()

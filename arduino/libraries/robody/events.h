@@ -7,14 +7,8 @@
  * party channel
  * one party has a pair of channel:one is for status report, another is for command receive.
  */
-enum EventChannel {
-	EVENT_CH_PRIVATE = 0,
-
-	EVENT_CH_ROBUDDY_S,
-	EVENT_CH_ROBUDDY_C,
-
-	EVENT_CH_ROBODY_S,
-	EVENT_CH_ROBODY_C,
+enum GlobalChannel {
+	EVENT_CH_ROBUDDY = 0,
 
 	EVENT_CH_ACC_S,
 	EVENT_CH_ACC_C,
@@ -29,10 +23,8 @@ enum EventChannel {
  * basic signals
  * one party could to support partially
  */
-enum EventSignal {
+enum BasicSignal {
 	EVENT_SIG_RESET = Q_USER_SIG,
-	EVENT_SIG_START,
-	EVENT_SIG_STOP,
 	EVENT_SIG_TIMEOUT,
 	//
 	MAX_BASIC_EVENT_SIG
