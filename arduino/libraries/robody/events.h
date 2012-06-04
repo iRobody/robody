@@ -7,23 +7,30 @@
  * party channel
  * one party has a pair of channel:one is for status report, another is for command receive.
  */
-enum GlobalChannel {
-	EVENT_CH_ROBUDDY = 0,
+enum BaseChannel {
+	EVENT_CH_PRIVATE = 0,
 
-	EVENT_CH_ACC_S,
+	MAX_BASE_EVENT_CH
+};
+
+enum RobodyChannel {
+	EVENT_CH_ACC_S = MAX_BASE_EVENT_CH,
 	EVENT_CH_ACC_C,
 
 	EVENT_CH_MOVE_S,
 	EVENT_CH_MOVE_C,
-	//
-	MAX_PUB_EVENT_CH
+
+	MAX_ROBODY_PUB_EVENT_CH
+
+	//above 1024 is for robuddy
 };
+
 
 /**
  * basic signals
  * one party could to support partially
  */
-enum BasicSignal {
+enum BaseSignal {
 	EVENT_SIG_RESET = Q_USER_SIG,
 	EVENT_SIG_TIMEOUT,
 	//
@@ -48,14 +55,11 @@ enum AccessorySignal {
  * both for publish and private
  */
 enum MoveSignal {
-	MV_SIG_FORWARD = MAX_BASIC_EVENT_SIG,
-	MV_SIG_BACKWARD,
-	MV_SIG_STOP,
-	MV_SIG_RIGH,
-	MV_SIG_LEFT,
-	MV_SIG_SPEED,
+	MV_SIG_DIRECT = MAX_BASIC_EVENT_SIG,
+	MV_SIG_STEER,
+	MV_SIG_ACCEL,
+	MV_SIG_BRAKE,
 	MV_SIG_RAW,
-
 	MAX_MOVE_SIG
 };
 
