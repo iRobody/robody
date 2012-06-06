@@ -331,12 +331,13 @@ byte MAX3421E::IntHandler()
 {
 	byte HIRQ,HIEN;
 	byte HIRQ_sendback = 0x00;
-    HIRQ = regRd( rHIRQ );                  //determine interrupt source
-    HIEN = regRd( rHIEN);
+    HIRQ = regRd( rHIRQ );
+    HIEN = regRd( rHIEN);                  //determine interrupt source
+
     HIRQ_sendback = HIRQ&HIEN;
+
     if( HIRQ_sendback & bmCONDETIRQ ) {
         busprobe();
-        HIRQ_sendback |= bmCONDETIRQ;
     }
 	//handler HOST transfer
 	if( (HIRQ_sendback & bmHXFRDNIRQ)
@@ -344,12 +345,12 @@ byte MAX3421E::IntHandler()
 		byte rsl = regRd( rHRSL) & 0x0f;
 		if( !rsl )
 			//ok, add receive flag
-		HIRQ_sendback |= bmRCVDAVIRQ;
+			HIEN |= bmRCVDAVIRQ;
 	}
 
     /* End HIRQ interrupts handling, clear serviced IRQs    */
-    regWr( rHIRQ, HIRQ_sendback );
-    return( HIRQ_sendback );
+    regWr( rHIRQ, HIRQ_sendback);
+    return( HIRQ&HIEN);
 }
 
 byte MAX3421E::GpxHandler()
