@@ -486,9 +486,11 @@ void USB::enSOF( ) {
 
 void USB::disSOF() {
 	disInt();
+	//for some device, we can't disable SOF again
+	/*
 	byte tmpdata = regRd( rMODE ) & (~bmSOFKAENAB);                 //start SOF generation
 	regWr( rMODE, tmpdata );
-
+	 */
 	byte hie = regRd( rHIEN);
 	regWr( rHIEN, hie& (~bmFRAMEIE));
 	enInt();
