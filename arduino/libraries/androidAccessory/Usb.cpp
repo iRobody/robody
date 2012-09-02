@@ -442,9 +442,11 @@ void USB::Task( void )      //USB state machine
 }
 
 bool USB::readFIFO( byte addr, byte ep, uint8_t nbytes, char* data) {
+	/*
 	uint8_t recV = regRd( rRCVBC);
-	/*if( recV < nbytes)
-		return false;*/
+	if( recV < nbytes)
+		return false;
+	*/
 	data = bytesRd( rRCVFIFO, nbytes, data );
 	if( regRd( rHRSL ) & bmRCVTOGRD ) {                     //save toggle value
                 devtable[ addr ].epinfo[ ep ].rcvToggle = bmRCVTOG1;

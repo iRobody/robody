@@ -9,8 +9,9 @@
  */
 enum BaseChannel {
 	EVENT_CH_PRIVATE = 0,
+	EVENT_CH_RESERVED,
 
-	MAX_BASE_EVENT_CH
+	MAX_BASE_EVENT_CH = 2
 };
 
 enum RobodyChannel {
@@ -20,9 +21,12 @@ enum RobodyChannel {
 	EVENT_CH_MOVE_S,
 	EVENT_CH_MOVE_C,
 
-	MAX_ROBODY_PUB_EVENT_CH
+	EVENT_CH_RANGE_S,
+	EVENT_CH_RANGE_C,
+	//
+	VALID_ROBODY_PUB_EVENT_CH,
 
-	//above 1024 is for robuddy
+	MAX_ROBODY_PUB_EVENT_CH = 256 //above 256 is for robuddy
 };
 
 
@@ -33,8 +37,9 @@ enum RobodyChannel {
 enum BaseSignal {
 	EVENT_SIG_RESET = Q_USER_SIG,
 	EVENT_SIG_TIMEOUT,
+	VALID_BASIC_EVENT_SIG,
 	//
-	MAX_BASIC_EVENT_SIG
+	MAX_BASIC_EVENT_SIG = 32,
 };
 
 /**
@@ -55,12 +60,21 @@ enum AccessorySignal {
  * both for publish and private
  */
 enum MoveSignal {
-	MV_SIG_DIRECT = MAX_BASIC_EVENT_SIG,
+	MV_SIG_RAW = MAX_BASIC_EVENT_SIG,
 	MV_SIG_STEER,
 	MV_SIG_ACCEL,
 	MV_SIG_BRAKE,
-	MV_SIG_RAW,
 	MAX_MOVE_SIG
+};
+
+/**
+ * range signals
+ * both for publish and private
+ */
+enum RangeSignal {
+	RNG_SIG_EDGE = MAX_BASIC_EVENT_SIG,
+	RNG_SIG_WALL,
+	MAX_RANGE_SIG
 };
 
 #endif //_EVENTS_H

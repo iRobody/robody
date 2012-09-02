@@ -202,7 +202,11 @@ namespace QP {
 #define EVENT_TYPE_RELAY 0x80
 
 #define QEVENT(sig) {0,0,0,0,sig,0}
-#define QEVENT_PUB(ch,sig) {0,0,EVENT_TYPE_RELAY,ch,sig,0}
+#define QEVENT_(sig,len,d...) {0,0,0,0,sig,len,##d}
+#define QEVENT_PUB(ch,sig) {0,0,0,ch,sig,0}
+#define QEVENT_PUB_(ch,sig,len,d...) {0,0,0,ch,sig,len,##d}
+#define QEVENT_RELAY_PUB(ch,sig) {0,0,EVENT_TYPE_RELAY,ch,sig,0}
+#define QEVENT_RELAY_PUB_(ch,sig,len,d...) {0,0,EVENT_TYPE_RELAY,ch,sig,len,##d}
 
 typedef uint8_t QChannel;
 

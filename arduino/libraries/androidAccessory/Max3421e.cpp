@@ -156,7 +156,6 @@ void MAX3421E::gpioWr( byte val )
 /* Single host register read        */
 byte MAX3421E::regRd( byte reg )    
 {
-  byte tmp;
     digitalWrite(MAX_SS,LOW);
     SPDR = reg;
     while(!( SPSR & ( 1 << SPIF )));
